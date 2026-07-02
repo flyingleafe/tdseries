@@ -2,7 +2,10 @@
 
 Read [`DESIGN.md`](./DESIGN.md) before touching library code: it is the
 binding API contract (dimension/index model, Series and Frame semantics,
-exactness invariants). [`README.md`](./README.md) is the human-facing summary.
+exactness invariants). [`README.md`](./README.md) is the human-facing
+summary; [`ROADMAP.md`](./ROADMAP.md) records deliberately deferred
+directions (CoordIndex, framed transforms over event series, lazy sources,
+element-wise operator layer) — check it before proposing "new" features.
 
 ## Layout
 

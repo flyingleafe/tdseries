@@ -30,9 +30,11 @@ from .indexes import (
     GridIndex,
     LabelIndex,
     RangeIndex,
+    SampleRate,
     SpanIndex,
     StampIndex,
     TimeIndex,
+    normalize_rate,
 )
 from .series import Series, events, spans, uniform, wrap
 
@@ -46,11 +48,13 @@ __all__ = [
     "IncompatibleError",
     "LabelIndex",
     "RangeIndex",
+    "SampleRate",
     "Series",
     "SpanIndex",
     "StampIndex",
     "TimeIndex",
     "events",
+    "normalize_rate",
     "secs_to_ticks",
     "spans",
     "ticks_to_secs",

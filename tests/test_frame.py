@@ -4,6 +4,8 @@ nested-frame recursion."""
 
 from __future__ import annotations
 
+import operator
+
 import numpy as np
 import pytest
 from hypothesis import given, settings
@@ -263,10 +265,13 @@ def test_concat_one_sided_entries_carried_over():
     assert joined["rps"].t_start_ticks == 1_000_000_000
 
 
-def test_add_dunder_is_concat():
+def test_plus_operator_is_not_concat():
+    # ``+`` is reserved for future aligned element-wise ops; concatenation is
+    # the named ``.concat`` method only.
     a = _frame_with_scalar(0, "A")
     b = _frame_with_scalar(1_000_000_000, "A")
-    assert (a + b).equal(a.concat(b))
+    with pytest.raises(TypeError):
+        operator.add(a, b)
 
 
 # ---------------------------------------------------------------------------

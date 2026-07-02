@@ -3,15 +3,52 @@ the trickiest of the three time-index kinds because of sub-sample cuts."""
 
 from __future__ import annotations
 
+import operator
+from fractions import Fraction
+
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from tflib.errors import DomainError, IncompatibleError
+from tflib.indexes import GridIndex
 from tflib.series import Series, uniform
 
-from .strategies import cut_points_ticks, multi_mic_uniform_series, uniform_series
+from .strategies import (
+    cut_points_ticks,
+    multi_mic_uniform_series,
+    tick_anchors,
+    uniform_series,
+)
+
+# Framed-transform rates: a base audio rate divided by an STFT hop gives an
+# exact fraction (e.g. 44100 / 256) that only stays exact as a rational.
+_framed_hops = st.sampled_from([160, 256, 441, 512])
+_base_srs = st.sampled_from([8000, 16000, 44100, 48000])
+
+
+@st.composite
+def rational_uniform_series(draw, min_n: int = 1, max_n: int = 64) -> Series:
+    """Mono series on a ``GridIndex`` whose rate is an exact fraction
+    ``Fraction(base_sr, hop)`` -- the framed-transform (STFT) case."""
+    sr = draw(_base_srs)
+    hop = draw(_framed_hops)
+    n = draw(st.integers(min_value=min_n, max_value=max_n))
+    t0 = draw(tick_anchors)
+    data = np.asarray(
+        draw(
+            st.lists(
+                st.floats(min_value=-100.0, max_value=100.0, allow_nan=False, allow_infinity=False),
+                min_size=n,
+                max_size=n,
+            )
+        ),
+        dtype=np.float64,
+    )
+    idx = GridIndex.create(Fraction(sr, hop), n, t_start=t0)
+    return Series(data, ("time",), {"time": idx})
+
 
 # ---------------------------------------------------------------------------
 # Full-domain slice is a no-op
@@ -122,10 +159,108 @@ def test_concat_mismatched_sample_rate_raises():
         a.concat(b)
 
 
-def test_add_dunder_is_concat():
+def test_plus_operator_is_not_concat():
+    # ``+`` is reserved for future aligned element-wise ops; concatenation is
+    # the named ``.concat`` method only.
     a = uniform(np.arange(5.0), sr=10, t_start=0)
     b = uniform(np.arange(5.0), sr=10, t_start=500_000_000)
-    assert (a + b).equal(a.concat(b))
+    with pytest.raises(TypeError):
+        operator.add(a, b)
+
+
+# ---------------------------------------------------------------------------
+# Rational (framed-transform) sample rates
+# ---------------------------------------------------------------------------
+
+
+def test_integral_float_sr_is_accepted():
+    us = uniform(np.arange(5.0), sr=44100.0)
+    ti = us.tindex
+    assert isinstance(ti, GridIndex)
+    assert ti.sr_num == 44100
+    assert ti.sr_den == 1
+
+
+def test_non_integral_float_sr_raises():
+    with pytest.raises(ValueError):
+        uniform(np.arange(5.0), sr=44100 / 256)  # 172.265625, not integral
+    with pytest.raises(ValueError):
+        GridIndex.create(172.265625, 5)
+
+
+def test_fraction_and_tuple_rates_normalize_equally():
+    a = GridIndex.create(Fraction(44100, 256), 10)
+    b = GridIndex.create((44100, 256), 10)
+    c = GridIndex.create((88200, 512), 10)  # same reduced fraction
+    # gcd(44100, 256) == 4, so the stored normalized pair is (11025, 64).
+    assert (a.sr_num, a.sr_den) == (11025, 64)
+    assert a.equal(b)
+    assert a.equal(c)
+    assert a.rate == Fraction(44100, 256)
+
+
+@settings(deadline=None, max_examples=200)
+@given(rational_uniform_series(), st.data())
+def test_rational_slice_concat_identity(us: Series, data):
+    a, b, c = data.draw(_cuts(us, 3))
+    left = us.ticks[a:b]
+    right = us.ticks[b:c]
+    whole = us.ticks[a:c]
+    assert left.concat(right).equal(whole)
+
+
+@settings(deadline=None, max_examples=100)
+@given(rational_uniform_series(min_n=4), st.data())
+def test_rational_many_cuts_rejoin(us: Series, data):
+    k = data.draw(st.integers(min_value=2, max_value=6))
+    pts = [us.t_start_ticks, *data.draw(_cuts(us, k)), us.t_end_ticks]
+    parts = [us.ticks[pts[i] : pts[i + 1]] for i in range(len(pts) - 1)]
+    joined = parts[0]
+    for p in parts[1:]:
+        joined = joined.concat(p)
+    assert joined.equal(us)
+
+
+# ---------------------------------------------------------------------------
+# Framed-rate roundtrip: dividing by / multiplying by an STFT hop is stable
+# under exact-fraction normalisation (no float drift), even after slice/shift.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("sr", [8000, 16000, 44100, 48000])
+@pytest.mark.parametrize("hop", [160, 256, 441, 512])
+def test_framed_rate_normalization_stable(sr: int, hop: int):
+    t0 = 1_700_000_000_000_000_000
+    base = GridIndex.create(sr, 100, t_start=t0)
+    framed_rate = Fraction(base.sr_num, base.sr_den * hop)
+    assert framed_rate == Fraction(sr, hop)
+    # Multiplying the framed rate back by the hop must reduce exactly to the
+    # original audio rate; a grid rebuilt with it .equal()s the original.
+    mapped_back = framed_rate * hop
+    rebuilt = GridIndex.create(mapped_back, 100, t_start=t0)
+    assert rebuilt.equal(base)
+
+
+@settings(deadline=None, max_examples=100)
+@given(rational_uniform_series(min_n=2), st.data())
+def test_framed_rate_roundtrip_after_ops(us: Series, data):
+    hop = data.draw(_framed_hops)
+    a, b = data.draw(_cuts(us, 2))
+    dt = data.draw(st.integers(min_value=-1_000_000_000_000, max_value=1_000_000_000_000))
+    ti = us.ticks[a:b].shift(dt).tindex
+    assert isinstance(ti, GridIndex)
+    framed_rate = Fraction(ti.sr_num, ti.sr_den * hop)
+    mapped_back = framed_rate * hop
+    assert mapped_back == Fraction(ti.sr_num, ti.sr_den)
+    rebuilt = GridIndex(
+        sr_num=mapped_back.numerator,
+        size=ti.size,
+        sr_den=mapped_back.denominator,
+        t_start_ticks=ti.t_start_ticks,
+        dur_ticks=ti.dur_ticks,
+        phase=ti.phase,
+    )
+    assert rebuilt.equal(ti)
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +271,15 @@ def test_add_dunder_is_concat():
 @settings(deadline=None, max_examples=100)
 @given(uniform_series(), st.data())
 def test_shift_roundtrip_ticks(us: Series, data):
+    dt = data.draw(st.integers(min_value=-10_000_000_000, max_value=10_000_000_000))
+    assert us.shift(dt).shift(-dt).equal(us)
+
+
+@settings(deadline=None, max_examples=100)
+@given(rational_uniform_series(), st.data())
+def test_rational_shift_roundtrip_ticks(us: Series, data):
+    """Shift roundtrips exactly for fractional rates, including at the
+    Unix-epoch-magnitude anchors drawn by the strategy."""
     dt = data.draw(st.integers(min_value=-10_000_000_000, max_value=10_000_000_000))
     assert us.shift(dt).shift(-dt).equal(us)
 

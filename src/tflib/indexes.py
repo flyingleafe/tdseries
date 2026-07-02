@@ -21,9 +21,12 @@ Two families:
   ``[t_start_ticks, t_start_ticks + dur_ticks)`` and supports exact
   ``slice`` / ``concat`` / O(1) ``shift``:
 
-  - ``GridIndex``  — uniform sample grid (audio): anchor + count + rate +
-    sub-sample ``phase``; the cut→sample-index map is exact integer
-    arithmetic for integer sample rates.
+  - ``GridIndex``  — uniform sample grid (audio): anchor + count + an exact
+    *rational* rate (``sr_num / sr_den``) + sub-sample ``phase``; the
+    cut->sample-index map is exact integer arithmetic for every rate.
+    Storing the rate as a reduced fraction keeps framed-transform rates such
+    as ``44100 / 256`` exact, so wav -> STFT -> iSTFT -> wav roundtrips
+    preserve the index; there is no float-rate epsilon fallback.
   - ``StampIndex`` — sorted point events (RPS, IMU): explicit relative
     int64 timestamps.
   - ``SpanIndex``  — half-open intervals (VAD, labels): starts/ends plus
@@ -40,6 +43,7 @@ import math
 import secrets
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
+from fractions import Fraction
 
 import numpy as np
 
@@ -56,8 +60,42 @@ from .errors import DomainError, IncompatibleError
 # ``int`` drops the axis.
 PosSel = slice | np.ndarray | int | None
 
-# Index-space epsilon used ONLY on the non-integer-sample-rate fallback path.
-INDEX_EPSILON: float = 1e-6
+# A sample rate accepted by the ``GridIndex`` constructors: an ``int`` or an
+# integral ``float`` (samples per second), an exact ``Fraction``, or a
+# ``(numerator, denominator)`` integer tuple.  Non-integral floats are
+# rejected -- pass a ``Fraction`` or a ``(num, den)`` tuple instead.
+SampleRate = int | float | Fraction | tuple[int, int]
+
+
+def normalize_rate(sr: SampleRate) -> tuple[int, int]:
+    """Coerce a :data:`SampleRate` to a reduced ``(sr_num, sr_den)`` pair with
+    both parts ``> 0``.
+
+    A non-integral ``float`` cannot be represented exactly and is rejected;
+    the caller should pass a ``Fraction`` (e.g. ``Fraction(44100, 256)``) or a
+    ``(num, den)`` tuple to express a fractional rate exactly.
+    """
+    if isinstance(sr, bool) or not isinstance(sr, (int, float, Fraction, tuple, np.integer)):
+        raise TypeError(f"unsupported sample-rate type {type(sr).__name__}")
+    if isinstance(sr, tuple):
+        num, den = int(sr[0]), int(sr[1])
+    elif isinstance(sr, Fraction):
+        num, den = sr.numerator, sr.denominator
+    elif isinstance(sr, float):
+        if not math.isfinite(sr):
+            raise ValueError(f"sample rate must be finite, got {sr!r}")
+        if not sr.is_integer():
+            raise ValueError(
+                f"non-integral float sample rate {sr!r} cannot be stored exactly; "
+                "pass a Fraction (e.g. Fraction(44100, 256)) or a (num, den) tuple"
+            )
+        num, den = int(sr), 1
+    else:
+        num, den = int(sr), 1
+    if num <= 0 or den <= 0:
+        raise ValueError(f"sample rate must be > 0, got ({num}, {den})")
+    g = math.gcd(num, den)
+    return num // g, den // g
 
 
 # =========================================================================
@@ -228,21 +266,29 @@ class GridIndex(TimeIndex):
     ``t_start + (phase + k)/sr``.
 
     No per-sample edge times are stored; every edge is derived from
-    ``(t_start_ticks, phase, sr)``.  ``phase`` in [-1, 0] is the offset of
-    sample 0's left edge from ``t_start`` in sample units — bounded by one
-    sample, so a float64 holds it to ~1e-21 s.  For integer ``sr`` the
-    cut-time → sample-index map is exact (``divmod`` on Python ints).
+    ``(t_start_ticks, phase, rate)``.  The rate is an *exact* reduced fraction
+    ``sr_num / sr_den`` samples per second (both parts ``> 0``), so
+    framed-transform rates such as ``44100 / 256`` stay exact and every
+    cut-time -> sample-index map is exact integer ``divmod`` arithmetic --
+    there is no float-rate epsilon fallback.  ``phase`` in [-1, 0] is the
+    offset of sample 0's left edge from ``t_start`` in sample units -- bounded
+    by one sample, so a float64 holds it to ~1e-21 s.
     """
 
-    sr: float
+    sr_num: int
     size: int
+    sr_den: int = 1
     t_start_ticks: int = 0
     dur_ticks: int = 0
     phase: float = 0.0
 
     def __post_init__(self) -> None:
-        if self.sr <= 0:
-            raise ValueError("sr must be > 0")
+        num, den = int(self.sr_num), int(self.sr_den)
+        if num <= 0 or den <= 0:
+            raise ValueError(f"sr_num ({num}) and sr_den ({den}) must be > 0")
+        g = math.gcd(num, den)
+        object.__setattr__(self, "sr_num", num // g)
+        object.__setattr__(self, "sr_den", den // g)
         if self.phase < -1.0 or self.phase > 0.0:
             raise ValueError(f"phase ({self.phase}) must be in [-1, 0]")
         if self.dur_ticks < 0:
@@ -251,7 +297,7 @@ class GridIndex(TimeIndex):
     @classmethod
     def create(
         cls,
-        sr: float,
+        sr: SampleRate,
         size: int,
         *,
         t_start: float | int = 0.0,
@@ -259,11 +305,28 @@ class GridIndex(TimeIndex):
         dur: int | None = None,
     ) -> GridIndex:
         """Grid whose declared domain matches the sample grid exactly
-        (unless ``dur`` ticks are given explicitly)."""
+        (unless ``dur`` ticks are given explicitly).  ``sr`` is coerced to an
+        exact ``(sr_num, sr_den)`` fraction by :func:`normalize_rate`."""
+        num, den = normalize_rate(sr)
         t0 = to_ticks(t_start)
         if dur is None:
-            dur = round(size * TICKS_PER_SECOND / sr)
-        return cls(sr=float(sr), size=int(size), t_start_ticks=t0, dur_ticks=dur, phase=phase)
+            # dur = round(size * TICKS_PER_SECOND * sr_den / sr_num), exact
+            # integer arithmetic with round-half-away-from-zero (all > 0).
+            q, r = divmod(size * TICKS_PER_SECOND * den, num)
+            dur = q + (1 if 2 * r >= num else 0)
+        return cls(
+            sr_num=num, size=int(size), sr_den=den, t_start_ticks=t0, dur_ticks=dur, phase=phase
+        )
+
+    @property
+    def sr(self) -> float:
+        """The sample rate as a float (display / interop)."""
+        return self.sr_num / self.sr_den
+
+    @property
+    def rate(self) -> Fraction:
+        """The exact sample rate as a :class:`fractions.Fraction`."""
+        return Fraction(self.sr_num, self.sr_den)
 
     @property
     def n(self) -> int:
@@ -271,7 +334,7 @@ class GridIndex(TimeIndex):
 
     @property
     def t_first_edge_ticks(self) -> int:
-        return round(self.t_start_ticks + self.phase * TICKS_PER_SECOND / self.sr)
+        return self.t_start_ticks + round(self.phase * TICKS_PER_SECOND * self.sr_den / self.sr_num)
 
     @property
     def t_first_edge(self) -> float:
@@ -289,39 +352,29 @@ class GridIndex(TimeIndex):
     def time_to_position(self, t: float | int) -> int:
         """Position of the sample cell containing time ``t``."""
         delta = to_ticks(t) - self.t_first_edge_ticks
-        sr = self.sr
-        sr_int = int(sr)
-        if sr == float(sr_int):
-            q, r = divmod(delta * sr_int, TICKS_PER_SECOND)
-            k = q + r / TICKS_PER_SECOND
-        else:
-            k = delta * sr / TICKS_PER_SECOND
-        return math.floor(k)
+        # floor(delta * sr / tps) = floor(delta * sr_num / (tps * sr_den));
+        # integer floor division is exact for a positive denominator.
+        return (delta * self.sr_num) // (TICKS_PER_SECOND * self.sr_den)
 
-    # ---- internal: cut-time → sample-index map (exact for integer sr) ----
+    # ---- internal: cut-time -> sample-index map (exact for every rate) ----
     def _cut_to_positions(self, ra: int, rb: int) -> tuple[int, int]:
-        sr = self.sr
-        sr_int = int(sr)
-        if sr == float(sr_int):  # integer sr → exact path
-            tps = TICKS_PER_SECOND
-            pticks = round(-self.phase * tps)  # ≥ 0, since phase ≤ 0
-            # left (floor): k = floor(ra*sr/tps - phase)
-            qa, ra_rem = divmod(ra * sr_int, tps)
-            ka = qa + (1 if ra_rem + pticks >= tps else 0)
-            # right (ceil): k = ceil(rb*sr/tps - phase)
-            qb, rb_rem = divmod(rb * sr_int, tps)
-            if rb_rem == 0 and pticks == 0:
-                kb = qb
-            elif rb_rem + pticks <= tps:
-                kb = qb + 1
-            else:
-                kb = qb + 2
-        else:  # non-integer sr fallback
-            tps = TICKS_PER_SECOND
-            k_ra = ra * sr / tps - self.phase
-            k_rb = rb * sr / tps - self.phase
-            ka = math.floor(k_ra + INDEX_EPSILON)
-            kb = math.ceil(k_rb - INDEX_EPSILON)
+        # k = ra * sr_num / (tps * sr_den) - phase.  With denom = tps * sr_den
+        # this is the integer-sr path with ``tps`` replaced by ``denom`` and
+        # the sample rate by ``sr_num`` -- exact ``divmod`` throughout.
+        denom = TICKS_PER_SECOND * self.sr_den
+        num = self.sr_num
+        pticks = round(-self.phase * denom)  # in [0, denom], since phase <= 0
+        # left (floor): k = floor(ra*num/denom - phase)
+        qa, ra_rem = divmod(ra * num, denom)
+        ka = qa + (1 if ra_rem + pticks >= denom else 0)
+        # right (ceil): k = ceil(rb*num/denom - phase)
+        qb, rb_rem = divmod(rb * num, denom)
+        if rb_rem + pticks == 0:
+            kb = qb
+        elif rb_rem + pticks <= denom:
+            kb = qb + 1
+        else:
+            kb = qb + 2
         ka = max(0, ka)
         kb = min(self.size, kb)
         if kb < ka:
@@ -334,14 +387,23 @@ class GridIndex(TimeIndex):
         rb = b - self.t_start_ticks
         ka, kb = self._cut_to_positions(ra, rb)
         # New phase: offset of the new sample 0's left edge from the new
-        # t_start, in sample units; consistent with the stored ka.
-        new_phase = float(self.phase + ka - ra * self.sr / TICKS_PER_SECOND)
+        # t_start, in sample units; consistent with the stored ka.  The
+        # fractional part is derived exactly via divmod so only a bounded
+        # remainder / denominator becomes float (tiny-error, like before).
+        denom = TICKS_PER_SECOND * self.sr_den
+        q, rem = divmod(ra * self.sr_num, denom)
+        new_phase = self.phase + (ka - q) - rem / denom
         if new_phase > 0.0:
             new_phase -= 1.0
         elif new_phase < -1.0:
             new_phase += 1.0
         idx = GridIndex(
-            sr=self.sr, size=kb - ka, t_start_ticks=a, dur_ticks=rb - ra, phase=new_phase
+            sr_num=self.sr_num,
+            size=kb - ka,
+            sr_den=self.sr_den,
+            t_start_ticks=a,
+            dur_ticks=rb - ra,
+            phase=new_phase,
         )
         return idx, slice(ka, kb)
 
@@ -353,19 +415,14 @@ class GridIndex(TimeIndex):
     def concat(self, other: TimeIndex) -> tuple[GridIndex, PosSel, PosSel]:
         if not isinstance(other, GridIndex):
             raise IncompatibleError(f"cannot concat GridIndex with {type(other).__name__}")
-        if self.sr != other.sr:
+        if (self.sr_num, self.sr_den) != (other.sr_num, other.sr_den):
             raise IncompatibleError(f"sample rates differ: {self.sr} vs {other.sr}")
-        sr = self.sr
         # Grid offset in sample-index space: ``other`` is glued so its
         # t_start lands at self's t_end.
+        denom = TICKS_PER_SECOND * self.sr_den
         sdur = self.dur_ticks
-        tps = TICKS_PER_SECOND
-        sr_int = int(sr)
-        if sr == float(sr_int):
-            q, r = divmod(sdur * sr_int, tps)
-            k_offset = q + r / tps + other.phase - self.phase
-        else:
-            k_offset = sdur * sr / tps + other.phase - self.phase
+        q, r = divmod(sdur * self.sr_num, denom)
+        k_offset = q + r / denom + other.phase - self.phase
 
         k_int = round(k_offset)
         if abs(k_offset - k_int) > 0.1:
@@ -386,8 +443,9 @@ class GridIndex(TimeIndex):
                 f"(expected {self.size} or {self.size - 1})"
             )
         idx = GridIndex(
-            sr=sr,
+            sr_num=self.sr_num,
             size=self.size + right_n,
+            sr_den=self.sr_den,
             t_start_ticks=self.t_start_ticks,
             dur_ticks=self.dur_ticks + other.dur_ticks,
             phase=self.phase,
@@ -400,7 +458,8 @@ class GridIndex(TimeIndex):
         return (
             self.t_start_ticks == other.t_start_ticks
             and self.dur_ticks == other.dur_ticks
-            and self.sr == other.sr
+            and self.sr_num == other.sr_num
+            and self.sr_den == other.sr_den
             and self.size == other.size
             and abs(self.phase - other.phase) <= 1e-12
         )

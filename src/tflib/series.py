@@ -23,7 +23,6 @@ import numpy as np
 from ._array import array_equal, take, to_numpy_f64
 from ._array import concat as concat_arrays
 from ._ticks import (
-    TICKS_PER_SECOND,
     seconds_to_ticks_exact,
     ticks_array_to_secs,
     ticks_to_secs,
@@ -35,9 +34,11 @@ from .indexes import (
     GridIndex,
     LabelIndex,
     RangeIndex,
+    SampleRate,
     SpanIndex,
     StampIndex,
     TimeIndex,
+    normalize_rate,
 )
 
 # A positional selection along one non-time axis (as accepted by ``.slice``):
@@ -328,9 +329,6 @@ class Series:
             new_data = concat_arrays([left, right], axis)
         return Series(new_data, self.dims, {**self.indexes, "time": new_index})
 
-    def __add__(self, other: object) -> Series:
-        return self.concat(other)
-
     # ---- non-time positional / label selection --------------------------
     def take_dim(self, name: str, sel: Any) -> Series:
         """Positional selection along a named non-time dim, co-updating that
@@ -408,19 +406,18 @@ class Series:
             raise ValueError(f"unsupported fill: {fill!r}")
         return np.moveaxis(result, -1, axis)
 
-    def resample(self, new_sr: float, *, kind: str = "linear") -> Series:
+    def resample(self, new_sr: SampleRate, *, kind: str = "linear") -> Series:
         """Resample onto a fresh phase-0 grid at ``new_sr`` over the same
-        declared domain; the result carries a ``GridIndex``."""
-        if new_sr <= 0:
-            raise ValueError(f"new_sr must be > 0, got {new_sr}")
+        declared domain; the result carries a ``GridIndex``.  ``new_sr`` is
+        coerced to an exact ``(num, den)`` fraction (see
+        :func:`~tflib.indexes.normalize_rate`)."""
+        num, den = normalize_rate(new_sr)
+        sr_float = num / den
         ti = self.tindex
-        n_new = max(1, round(ticks_to_secs(ti.dur_ticks) * new_sr))
-        new_dur = round(n_new * TICKS_PER_SECOND / new_sr)
-        grid_s = ti.t_start + np.arange(n_new) / new_sr
+        n_new = max(1, round(ticks_to_secs(ti.dur_ticks) * sr_float))
+        grid_s = ti.t_start + np.arange(n_new) / sr_float
         vals = self.interpolate(grid_s, kind=kind, fill="clamp")
-        new_index = GridIndex(
-            sr=float(new_sr), size=n_new, t_start_ticks=ti.t_start_ticks, dur_ticks=new_dur
-        )
+        new_index = GridIndex.create((num, den), n_new, t_start=ti.t_start_ticks)
         return Series(vals, self.dims, {**self.indexes, "time": new_index})
 
     # ---- data replacement ----------------------------------------------
@@ -477,14 +474,16 @@ def _default_dims(ndim: int) -> tuple[str | None, ...]:
 
 def uniform(
     data: Any,
-    sr: float,
+    sr: SampleRate,
     *,
     dims: tuple[str | None, ...] | None = None,
     t_start: float | int = 0.0,
     phase: float = 0.0,
 ) -> Series:
     """A uniformly-sampled series on a ``GridIndex``.  ``dims`` defaults to
-    ``(None, ..., "time")``; ``t_start`` is float seconds or int ticks."""
+    ``(None, ..., "time")``; ``sr`` is coerced to an exact ``(num, den)``
+    fraction (see :func:`~tflib.indexes.normalize_rate`); ``t_start`` is float
+    seconds or int ticks."""
     dims = _default_dims(data.ndim) if dims is None else tuple(dims)
     size = int(data.shape[dims.index("time")])
     idx = GridIndex.create(sr, size, t_start=t_start, phase=phase)

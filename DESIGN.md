@@ -84,7 +84,7 @@ Methods:
   positional selection along the time axis, replace `indexes["time"]`.
 - `shift(dt) -> Series` — `to_ticks` coercion (float = seconds, int = ticks);
   O(1); atemporal series raise `ValueError`.
-- `concat(other) -> Series` (and `__add__`) — glue along time. Requires
+- `concat(other) -> Series` — glue along time. Requires
   identical `dims`, matching data-presence, equal non-time indexes
   (`IncompatibleError` otherwise; `RangeIndex` defaults compared by size).
   Time logic delegates to `tindex.concat(other.tindex)` → apply
@@ -155,7 +155,7 @@ API:
   (hull expands as needed), `merge(other, overwrite=False)` (key collisions
   error unless overwrite; hull = union).
 - time ops: `frame.time[a:b]`, `frame.ticks[a:b]`, `slice_ticks(a, b)`,
-  `shift(dt)`, `concat(other)` / `+`.
+  `shift(dt)`, `concat(other)`.
   - slice: window must lie inside the frame domain (`DomainError`); each
     temporal child is clipped to its overlap with the window and dropped if
     disjoint; invariant entries pass through.
@@ -179,6 +179,117 @@ API:
 Frame invariant (property-tested, composed across all leaf kinds):
 
     frame.ticks[a:b].concat(frame.ticks[b:c]) == frame.ticks[a:c]
+
+## Operators (decided 2026-07-02)
+
+Arithmetic dunders (`+`, `*`, ...) are **reserved for aligned element-wise
+operations** (mixing, gain), matching numpy/xarray intuition — a video-editor
+mix should read `0.5 * a + 0.3 * b`.  Concatenation is the named `.concat()`
+method only; `__add__` is NOT concat.  Until the align/apply layer lands
+(below), the arithmetic dunders are simply absent.
+
+## Exact rational sample rates (decided 2026-07-02)
+
+`GridIndex` stores its rate as a normalized integer fraction
+`(sr_num, sr_den)` — samples per second — not a float.  Motivation: framed
+transforms (STFT with hop `h`) produce rates `sr / h` that are non-integer
+but exactly rational; a float rate would demote them to an epsilon-tolerance
+path.  With rational rates every grid computation is exact integer
+arithmetic (`divmod` against `TICKS_PER_SECOND * sr_den`), the epsilon
+fallback is deleted outright, and **isomorphism roundtrips preserve the index
+exactly**:
+
+    inverse_spec(forward_spec(idx)).equal(idx)      # wav -> STFT -> iSTFT -> wav
+
+Constructors accept `int`, integral `float`, `fractions.Fraction`, or a
+`(num, den)` tuple; non-integral floats are rejected (pass the exact
+fraction instead).
+
+## Transforms, alignment, streaming — v1.1 design (agreed, not yet implemented)
+
+Regularizer domains used to pressure-test these decisions: the drone project
+(audio+telemetry), video-editor backend, finance (ticks/bars/as-of joins),
+physiological monitoring (multi-rate biosignals + categorical stages),
+football analytics (LabelIndex joins, ragged player dims), and server
+observability (logs/traces as stamps/spans, windowed aggregation).
+
+### Unary framed transforms
+
+The library owns no DSP — only the *time bookkeeping* of transforms.  All
+practically relevant grid-warping transforms (STFT, conv/pool stacks,
+resamplers) share one structure: output step `k` depends on the input span
+`[k*hop - left, k*hop - left + win)`.  This is captured by a declarative
+spec:
+
+```python
+spec = Framed(win=1024, hop=256, center=True)    # causal: left=win-1, right=0
+latents = audio.transform(stft_fn, time=spec, dims=("mic", "freq", "time"))
+```
+
+`transform` runs the user's arbitrary `data -> data` function; the spec is
+used for exactly two derived quantities:
+
+1. **forward map** — `GridIndex(rate, anchor, phase) ->
+   GridIndex(rate/hop, anchor', phase')`; frame-center alignment is
+   expressed through the existing `phase` mechanism (center=True gives
+   output phase -0.5).
+2. **pullback** — `spec.required_input(a, b)`: the input tick window needed
+   to compute output window `[a, b)` (receptive-field arithmetic).  This
+   powers patch inference and streaming.
+
+Specs compose (`spec_a >> spec_b`, standard stride/receptive-field
+composition), so a deep encoder's time semantics is derived, never
+hand-computed.  Invertible pairs (STFT/iSTFT) must satisfy the roundtrip
+identity above exactly.  New non-time dims (`"freq"`) arrive as ordinary
+named dims (bare `RangeIndex` in v1; the numeric `CoordIndex` is deferred —
+see `ROADMAP.md`).
+
+**v1 scope (decided 2026-07-02): `transform` accepts `GridIndex` inputs
+only** (uniform -> uniform).  Sliding-window operators over non-uniform
+event series (moving averages over ticks, event-rate counters) go through
+`resample_on(grid)` first; that detour is semantically complete but
+inefficient for sparse events, so a native `FramedEvents` generalization is
+on the roadmap (`ROADMAP.md` § Framed transforms over non-uniform series).
+
+### N-ary operations = align, then broadcast by name, then ufunc
+
+Three orthogonal primitives instead of an n-ary op zoo:
+
+1. `align(*series, domain="intersection"|"union", to=<series|index>,
+   fill=...)` — the ONLY place where domains/grids are reconciled.
+   Union+fill=0 is the video-editor clip mix; `resample_on(other,
+   kind="previous")` (zero-order hold) is simultaneously the DAW automation
+   curve and the finance as-of join.  `interpolate` gains
+   `kind="previous"|"nearest"` alongside `"linear"`.
+2. **Named-dim broadcasting**: dims are matched by NAME, not position —
+   `(mic, time) * (time,)` broadcasts, `(mic, time) * (rotor, time)`
+   outer-broadcasts to `(mic, rotor, time)`.
+3. **Strict element-wise application**: `tflib.apply(fn, *series)` and the
+   arithmetic dunders require *identical* time indexes and raise
+   `IncompatibleError` otherwise.  No silent xarray-style intersection —
+   the finance regularizer forbids implicit data loss; magic never crosses
+   domain boundaries, only explicit `align` does.
+
+### Streaming
+
+Streaming introduces no new ontology; the exactness algebra is the
+correctness proof for chunking:
+
+    f(x).ticks[a:b] == f(x.ticks[a-left : b+right]).ticks[a:b]
+
+with `left`/`right` from the spec pullback — property-testable.  Three thin
+pieces make it real:
+
+1. **Lazy leaf protocol** (v1 scope: protocol only): `Series.data` requires
+   only `shape`, `dtype`, `ndim`, and `__getitem__` returning an ndarray.
+   numpy views already make slicing zero-copy and `np.memmap` works today;
+   video decoders (PyAV/decord) plug in later behind a small adapter.
+2. **Stateless pull execution**: `frame.stream(start, chunk)` yields
+   successive `frame.ticks[t : t+chunk)`; a transform in the pipeline pulls
+   its `required_input` window per chunk.  Stateful streaming (RNN carry)
+   is explicitly out of scope — that state belongs to the model.
+3. **Streaming mixing** is per-chunk `align(union, fill=0)` — no special
+   case.
 
 ## The motivating example
 
@@ -208,5 +319,6 @@ one = tf["rps"]                   # absolute-time Series; tf unchanged
 
 ## Non-goals (v1)
 
-- Lazy / disk-backed storage; datetime64 interop; value-merging of
-  coincident events; pytree registration with torch/jax (planned follow-up).
+- Lazy / disk-backed storage beyond the array protocol; datetime64 interop;
+  value-merging of coincident events; pytree registration with torch/jax.
+  Deferred directions live in [`ROADMAP.md`](./ROADMAP.md).

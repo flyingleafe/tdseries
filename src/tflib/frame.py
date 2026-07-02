@@ -324,9 +324,6 @@ class Frame:
             t_end=self.t_start_ticks + self.dur_ticks + other.dur_ticks,
         )
 
-    def __add__(self, other: Frame) -> Frame:
-        return self.concat(other)
-
     # ---- dim ops (recursive over Series leaves) -------------------------
     @property
     def slice(self) -> _FramePosSlicer:
