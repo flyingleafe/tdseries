@@ -18,7 +18,22 @@ dev = [
     "pytest>=8.0",
     "hypothesis>=6.100",
     "ruff>=0.4",
+    "torch>=2.0",
 ]
+
+[tool.uv.sources]
+# Dev/CI only need torch for type-checking + tests, not GPU kernels; pin to
+# the CPU-only wheel index so `uv sync` doesn't pull the CUDA/nvidia stack
+# (several GB). Downstream users of the `torch` extra are unaffected --
+# this source override is local to this workspace's lockfile.
+torch = [
+    { index = "pytorch-cpu", marker = "platform_system != 'Darwin'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]

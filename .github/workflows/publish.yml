@@ -6,7 +6,11 @@ on:
       - "v*"
 
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+
   publish:
+    needs: checks
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -23,9 +27,6 @@ jobs:
 
       - name: Install Python
         run: uv python install 3.12
-
-      - name: Run tests
-        run: uv run pytest
 
       - name: Build
         run: uv build

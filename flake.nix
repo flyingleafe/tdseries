@@ -13,19 +13,35 @@
         pkgs = nixpkgs.legacyPackages.${system};
         python = pkgs.python312;
 
+        # Hooks that need no project dependencies, so they also work inside
+        # the hermetic `nix flake check` sandbox (no venv, no network).
+        sandboxHooks = {
+          ruff = {
+            enable = true;
+            package = pkgs.ruff;
+          };
+          ruff-format = {
+            enable = true;
+            package = pkgs.ruff;
+          };
+        };
+
+        # `nix flake check` runs this: sandbox-safe hooks only.
+        ci-check = git-hooks.lib.${system}.run {
+          src = ./.;
+          hooks = sandboxHooks;
+        };
+
+        # Local `git commit` hook set: adds basedpyright, which needs
+        # numpy/hypothesis from the uv venv activated by the devShell
+        # hook below, so it can't run inside the flake-check sandbox.
         pre-commit-check = git-hooks.lib.${system}.run {
           src = ./.;
-          hooks = {
-            ruff = {
-              enable = true;
-              package = pkgs.ruff;
-            };
-            ruff-format = {
-              enable = true;
-              package = pkgs.ruff;
-            };
+          hooks = sandboxHooks // {
             pyright = {
               enable = true;
+              package = pkgs.basedpyright;
+              settings.binPath = "${pkgs.basedpyright}/bin/basedpyright";
             };
           };
         };
@@ -41,7 +57,7 @@
           pkgs.writeShellScriptBin "pre-commit-run" script;
 
         checks = {
-          inherit pre-commit-check;
+          inherit ci-check;
         };
 
         devShells.default = pkgs.mkShell {

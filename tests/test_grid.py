@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import operator
 from fractions import Fraction
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -165,7 +166,7 @@ def test_plus_operator_is_not_concat():
     a = uniform(np.arange(5.0), sr=10, t_start=0)
     b = uniform(np.arange(5.0), sr=10, t_start=500_000_000)
     with pytest.raises(TypeError):
-        operator.add(a, b)
+        operator.add(cast(Any, a), b)
 
 
 # ---------------------------------------------------------------------------

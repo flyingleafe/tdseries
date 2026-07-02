@@ -28,12 +28,18 @@ element-wise operator layer) — check it before proposing "new" features.
 3. `shift` is O(1) everywhere: content is stored anchor-relative, only the
    scalar anchor moves. Frames store children relative to the frame anchor;
    extraction re-anchors a copy, never mutates.
-4. No `# type: ignore` / `# noqa` — restructure until ruff+pyright pass
+4. No `# type: ignore` / `# noqa` — restructure until ruff+basedpyright pass
    (a PostToolUse hook may enforce this on every write).
 
 ## Workflow
 
 - `uv sync` then `uv run pytest` (hypothesis suite, runs in tens of seconds).
-- `nix develop` for the hooked dev shell (ruff, ruff-format, pyright).
-- torch is an optional extra; keep `src/tdseries` importable without it
-  (lazy import inside `_array.py` only).
+- `nix develop` for the hooked dev shell (ruff, ruff-format, basedpyright).
+- torch is an optional extra for runtime users (lazy import inside
+  `_array.py` only, `src/tdseries` stays importable without it); it's a
+  `dev` dependency-group member so basedpyright/tests can see it locally
+  and in CI. `[tool.uv.sources]` pins it to the CPU-only wheel index so
+  `uv sync` doesn't pull the CUDA/nvidia stack.
+- CI (`.github/workflows/checks.yml`, reused by `ci.yml` and `publish.yml`)
+  runs ruff + ruff-format (`nix flake check`), basedpyright, and pytest via
+  `nix develop`; publishing to PyPI on tag push is gated on all three passing.

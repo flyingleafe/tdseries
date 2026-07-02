@@ -5,6 +5,7 @@ nested-frame recursion."""
 from __future__ import annotations
 
 import operator
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -271,7 +272,7 @@ def test_plus_operator_is_not_concat():
     a = _frame_with_scalar(0, "A")
     b = _frame_with_scalar(1_000_000_000, "A")
     with pytest.raises(TypeError):
-        operator.add(a, b)
+        operator.add(cast(Any, a), b)
 
 
 # ---------------------------------------------------------------------------
