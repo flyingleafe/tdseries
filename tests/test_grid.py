@@ -1,4 +1,4 @@
-"""Invariants for ``Series`` built with ``tflib.uniform()`` (``GridIndex``) --
+"""Invariants for ``Series`` built with ``tdseries.uniform()`` (``GridIndex``) --
 the trickiest of the three time-index kinds because of sub-sample cuts."""
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tflib.errors import DomainError, IncompatibleError
-from tflib.indexes import GridIndex
-from tflib.series import Series, uniform
+from tdseries.errors import DomainError, IncompatibleError
+from tdseries.indexes import GridIndex
+from tdseries.series import Series, uniform
 
 from .strategies import (
     cut_points_ticks,

@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tflib import (
+from tdseries import (
     Frame,
     IncompatibleError,
     Series,
@@ -20,7 +20,7 @@ from tflib import (
     uniform,
     wrap,
 )
-from tflib.errors import DomainError
+from tdseries.errors import DomainError
 
 from .strategies import (
     cut_points_ticks,

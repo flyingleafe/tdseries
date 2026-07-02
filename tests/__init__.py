@@ -1,1 +1,1 @@
-"""tflib test suite (hypothesis property tests + unit tests)."""
+"""tdseries test suite (hypothesis property tests + unit tests)."""

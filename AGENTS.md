@@ -1,4 +1,4 @@
-# tflib — agent guide
+# tdseries — agent guide
 
 Read [`DESIGN.md`](./DESIGN.md) before touching library code: it is the
 binding API contract (dimension/index model, Series and Frame semantics,
@@ -11,12 +11,12 @@ element-wise operator layer) — check it before proposing "new" features.
 
 | Path | Role |
 |---|---|
-| `src/tflib/_ticks.py` | seconds↔int64-tick conversion boundary; `TICKS_PER_SECOND` |
-| `src/tflib/_array.py` | numpy/torch backend dispatch (`take`, `concat`, `array_equal`, ...) |
-| `src/tflib/errors.py` | `DomainError`, `IncompatibleError`, `DimensionError` |
-| `src/tflib/indexes.py` | the index hierarchy: `RangeIndex`, `LabelIndex` (ordinary dims); `GridIndex`, `StampIndex`, `SpanIndex` (time). All exact-tick cut/seam arithmetic lives here. |
-| `src/tflib/series.py` | `Series` leaf (data + dims + indexes) and factories `uniform`/`events`/`spans`/`wrap` |
-| `src/tflib/frame.py` | `Frame` pytree node: relative-anchor storage, hull, recursion of time/dim ops |
+| `src/tdseries/_ticks.py` | seconds↔int64-tick conversion boundary; `TICKS_PER_SECOND` |
+| `src/tdseries/_array.py` | numpy/torch backend dispatch (`take`, `concat`, `array_equal`, ...) |
+| `src/tdseries/errors.py` | `DomainError`, `IncompatibleError`, `DimensionError` |
+| `src/tdseries/indexes.py` | the index hierarchy: `RangeIndex`, `LabelIndex` (ordinary dims); `GridIndex`, `StampIndex`, `SpanIndex` (time). All exact-tick cut/seam arithmetic lives here. |
+| `src/tdseries/series.py` | `Series` leaf (data + dims + indexes) and factories `uniform`/`events`/`spans`/`wrap` |
+| `src/tdseries/frame.py` | `Frame` pytree node: relative-anchor storage, hull, recursion of time/dim ops |
 | `tests/` | hypothesis property tests; `strategies.py` draws exact int64 tick anchors (small and Unix-magnitude) |
 
 ## Load-bearing invariants (do not weaken)
@@ -35,5 +35,5 @@ element-wise operator layer) — check it before proposing "new" features.
 
 - `uv sync` then `uv run pytest` (hypothesis suite, runs in tens of seconds).
 - `nix develop` for the hooked dev shell (ruff, ruff-format, pyright).
-- torch is an optional extra; keep `src/tflib` importable without it
+- torch is an optional extra; keep `src/tdseries` importable without it
   (lazy import inside `_array.py` only).

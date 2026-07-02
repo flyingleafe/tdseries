@@ -1,4 +1,4 @@
-# tflib
+# tdseries
 
 Immutable pytree frames of tensors with **named, indexed dimensions**, where
 **time** is a first-class dimension stored in exact int64 ticks (nanoseconds).
@@ -9,14 +9,14 @@ geometry that shares their non-time dimensions — e.g. multichannel audio
 `(rotor, time)` together with rotor positions `(rotor, 3)`:
 
 ```python
-import tflib as tf
+import tdseries as td
 
-frame = tf.Frame({
-    "audio":     tf.uniform(audio_8xT, sr=44100, dims=("mic", "time")),
-    "mic_pos":   tf.wrap(pos_8x3, dims=("mic", None)),
-    "rps":       tf.events(stamps, rps_4xM, dims=("rotor", "time")),
-    "rotor_pos": tf.wrap(rpos_4x3, dims=("rotor", None)),
-    "vad":       tf.spans(starts, ends),
+frame = td.Frame({
+    "audio":     td.uniform(audio_8xT, sr=44100, dims=("mic", "time")),
+    "mic_pos":   td.wrap(pos_8x3, dims=("mic", None)),
+    "rps":       td.events(stamps, rps_4xM, dims=("rotor", "time")),
+    "rotor_pos": td.wrap(rpos_4x3, dims=("rotor", None)),
+    "vad":       td.spans(starts, ends),
     "recording_id": "FLY124",
 })
 

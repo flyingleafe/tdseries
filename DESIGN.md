@@ -1,4 +1,4 @@
-# tflib — design contract
+# tdseries — design contract
 
 Immutable pytree frames of tensors with **named, indexed dimensions**; time is
 a first-class dimension indexed in exact int64 **ticks** (`TICKS_PER_SECOND =
@@ -16,7 +16,7 @@ positional selections. This is what lets tensors of *different lengths* share
 a dimension (audio at 44.1 kHz and RPS events at ~100 Hz both have dim
 `"time"`).
 
-Index families (implemented in `tflib/indexes.py`, already written):
+Index families (implemented in `tdseries/indexes.py`, already written):
 
 | Index | Domain | Sizes across a frame | Selection |
 |---|---|---|---|
@@ -38,7 +38,7 @@ The dim name `"time"` is reserved: it must carry a `TimeIndex`
 `shift` is O(1) everywhere (only the scalar anchor moves; stored content is
 anchor-relative).
 
-## `Series` — the leaf (`tflib/series.py`)
+## `Series` — the leaf (`tdseries/series.py`)
 
 Frozen dataclass, `eq=False`:
 
@@ -53,7 +53,7 @@ Series(
 Validation: dims unique among named; `"time"` ⇒ `indexes["time"]` is a
 `TimeIndex` with `n ==` axis size; non-time named dims may carry a
 `RangeIndex`/`LabelIndex` with matching `n`; anonymous (`None`) axes carry no
-index. Use `tflib._array.is_tensor/take/concat/array_equal/to_numpy_f64` for
+index. Use `tdseries._array.is_tensor/take/concat/array_equal/to_numpy_f64` for
 all data manipulation (they dispatch over the numpy and torch backends).
 
 Properties: `shape`, `ndim`, `has_time`, `time_axis`, `tindex` (raises
@@ -120,7 +120,7 @@ wrap(data, dims=None, indexes=None)                          # atemporal; dims d
 `dims=("time",)`). Timestamp/bound arrays: float = seconds (quantised once),
 int = ticks — matching the old `from_events`/`from_segments`.
 
-## `Frame` — the pytree node (`tflib/frame.py`)
+## `Frame` — the pytree node (`tdseries/frame.py`)
 
 Frozen dataclass `Frame(entries, *, t_start=None, t_end=None)` with
 `entries: Mapping[str, Series | Frame | Any]`.
@@ -264,7 +264,7 @@ Three orthogonal primitives instead of an n-ary op zoo:
 2. **Named-dim broadcasting**: dims are matched by NAME, not position —
    `(mic, time) * (time,)` broadcasts, `(mic, time) * (rotor, time)`
    outer-broadcasts to `(mic, rotor, time)`.
-3. **Strict element-wise application**: `tflib.apply(fn, *series)` and the
+3. **Strict element-wise application**: `tdseries.apply(fn, *series)` and the
    arithmetic dunders require *identical* time indexes and raise
    `IncompatibleError` otherwise.  No silent xarray-style intersection —
    the finance regularizer forbids implicit data loss; magic never crosses
@@ -294,7 +294,7 @@ pieces make it real:
 ## The motivating example
 
 ```python
-tf = Frame({
+frame = Frame({
     "audio":   uniform(audio_8xT, sr=44100, dims=("mic", "time")),
     "mic_pos": wrap(pos_8x3, dims=("mic", None)),
     "rps":     events(ts, rps_4xM, dims=("rotor", "time")),
@@ -303,9 +303,9 @@ tf = Frame({
     "meta":    Frame({"recording_id": "FLY124"}),
 })
 
-sub = tf.slice["mic", 0]          # audio (T,), mic_pos (3,) — same mic 0
-clip = tf.time[1.0:4.5]           # all temporal leaves cut, invariants kept
-one = tf["rps"]                   # absolute-time Series; tf unchanged
+sub = frame.slice["mic", 0]          # audio (T,), mic_pos (3,) — same mic 0
+clip = frame.time[1.0:4.5]           # all temporal leaves cut, invariants kept
+one = frame["rps"]                   # absolute-time Series; frame unchanged
 ```
 
 ## Code standards

@@ -2,14 +2,14 @@
 
 A ``Frame`` holds a dict of named entries.  Two kinds:
 
-* **temporal** — a :class:`~tflib.series.Series` with a time dim, or a nested
+* **temporal** — a :class:`~tdseries.series.Series` with a time dim, or a nested
   ``Frame``.  These share the frame's single absolute anchor: the frame owns
   ``t_start_ticks`` + ``dur_ticks`` (the hull of its temporal children) and
   stores each temporal child **relative** to that anchor, so ``shift`` is O(1)
   and reading a child back (``frame[key]``) re-anchors it to absolute time.
 * **invariant** — an atemporal ``Series`` (e.g. mic positions) or any other
   Python scalar/object.  Raw numpy/torch tensors are auto-wrapped via
-  :func:`~tflib.series.wrap` so an entry is always a ``Series``, ``Frame``, or
+  :func:`~tdseries.series.wrap` so an entry is always a ``Series``, ``Frame``, or
   plain value.
 
 Time algebra (``slice`` / ``concat`` / ``shift``) mirrors the old

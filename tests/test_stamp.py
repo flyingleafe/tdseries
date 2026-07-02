@@ -1,4 +1,4 @@
-"""Invariants for ``Series`` built with ``tflib.events()`` (``StampIndex``) --
+"""Invariants for ``Series`` built with ``tdseries.events()`` (``StampIndex``) --
 exact int64 tick storage of sorted point events."""
 
 from __future__ import annotations
@@ -8,9 +8,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tflib.errors import DomainError, IncompatibleError
-from tflib.indexes import StampIndex
-from tflib.series import Series, events
+from tdseries.errors import DomainError, IncompatibleError
+from tdseries.indexes import StampIndex
+from tdseries.series import Series, events
 
 from .strategies import (
     cut_points_ticks,

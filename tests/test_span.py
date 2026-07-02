@@ -1,4 +1,4 @@
-"""Invariants for ``Series`` built with ``tflib.spans()`` (``SpanIndex``) --
+"""Invariants for ``Series`` built with ``tdseries.spans()`` (``SpanIndex``) --
 half-open intervals with identity ids that split on a cut and re-merge on
 concat."""
 
@@ -9,9 +9,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tflib.errors import DomainError
-from tflib.indexes import SpanIndex
-from tflib.series import Series, spans
+from tdseries.errors import DomainError
+from tdseries.indexes import SpanIndex
+from tdseries.series import Series, spans
 
 from .strategies import cut_points_ticks, span_series, span_series_with_values
 

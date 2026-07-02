@@ -1,4 +1,4 @@
-# tflib — future plans
+# tdseries — future plans
 
 Deliberately deferred design directions. Each entry states the motivation,
 the shape the design already leaves for it, and why it is not in v1.

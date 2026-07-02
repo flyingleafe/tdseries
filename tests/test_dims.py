@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tflib import (
+from tdseries import (
     DimensionError,
     Frame,
     LabelIndex,

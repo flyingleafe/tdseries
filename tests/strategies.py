@@ -1,7 +1,7 @@
-"""Hypothesis strategies for ``tflib`` property tests.
+"""Hypothesis strategies for ``tdseries`` property tests.
 
 Ports the reference strategies from harmonic-noise-suppression's
-``tests/utils/data/strategies.py`` to the ``tflib`` ``Series``/``Frame`` API.
+``tests/utils/data/strategies.py`` to the ``tdseries`` ``Series``/``Frame`` API.
 Series are built through the public factory functions (``uniform``/
 ``events``/``spans``) with exact int ticks, so slice/concat invariants can be
 checked exactly (``.equal()``, never ``allclose``).
@@ -17,8 +17,8 @@ from __future__ import annotations
 import numpy as np
 from hypothesis import strategies as st
 
-from tflib._ticks import TICKS_PER_SECOND
-from tflib.series import Series, events, spans, uniform
+from tdseries._ticks import TICKS_PER_SECOND
+from tdseries.series import Series, events, spans, uniform
 
 # ---- tick anchors ---------------------------------------------------------
 # Small magnitudes (up to ~3 hours in ns) and Unix-epoch magnitude (~2020s).

@@ -1,4 +1,4 @@
-"""tflib — immutable pytree frames of tensors with named, indexed dimensions.
+"""tdseries — immutable pytree frames of tensors with named, indexed dimensions.
 
 Time is a first-class dimension indexed in exact int64 ticks
 (``TICKS_PER_SECOND = 1e9``); slice / concat / shift compose exactly:
@@ -6,15 +6,15 @@ Time is a first-class dimension indexed in exact int64 ticks
 
 Usage::
 
-    import tflib as tf
+    import tdseries as td
 
-    frame = tf.Frame({
-        "audio":     tf.uniform(audio_8xT, sr=44100, dims=("mic", "time")),
-        "mic_pos":   tf.wrap(pos_8x3, dims=("mic", None)),
-        "rps":       tf.events(ts, rps_4xM, dims=("rotor", "time")),
-        "rotor_pos": tf.wrap(rpos_4x3, dims=("rotor", None)),
-        "vad":       tf.spans(starts, ends),
-        "meta":      tf.Frame({"recording_id": "FLY124"}),
+    frame = td.Frame({
+        "audio":     td.uniform(audio_8xT, sr=44100, dims=("mic", "time")),
+        "mic_pos":   td.wrap(pos_8x3, dims=("mic", None)),
+        "rps":       td.events(ts, rps_4xM, dims=("rotor", "time")),
+        "rotor_pos": td.wrap(rpos_4x3, dims=("rotor", None)),
+        "vad":       td.spans(starts, ends),
+        "meta":      td.Frame({"recording_id": "FLY124"}),
     })
 
     sub = frame.slice["mic", 0]      # audio (T,), mic_pos (3,) — same mic 0

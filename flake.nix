@@ -1,5 +1,5 @@
 {
-  description = "tflib — tick-exact time-series frames with named, indexed dimensions";
+  description = "tdseries — tick-exact time-series frames with named, indexed dimensions";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

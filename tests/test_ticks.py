@@ -1,4 +1,4 @@
-"""Tests for ``tflib._ticks`` -- the seconds<->int64-tick conversion
+"""Tests for ``tdseries._ticks`` -- the seconds<->int64-tick conversion
 boundary, and its two scalar coercion rules (``to_ticks`` vs
 ``seconds_to_ticks_exact``)."""
 
@@ -9,7 +9,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tflib._ticks import (
+from tdseries._ticks import (
     TICKS_PER_SECOND,
     seconds_to_ticks_exact,
     secs_array_to_ticks,

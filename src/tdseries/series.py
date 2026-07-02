@@ -2,7 +2,7 @@
 
 A ``Series`` wraps one array (numpy or torch) together with a ``dims`` tuple
 (one name, or ``None``, per axis) and an ``indexes`` mapping from dim name to
-its :class:`~tflib.indexes.DimIndex` / :class:`~tflib.indexes.TimeIndex`.  Time
+its :class:`~tdseries.indexes.DimIndex` / :class:`~tdseries.indexes.TimeIndex`.  Time
 lives on the reserved ``"time"`` dim and carries a ``TimeIndex``; all time
 algebra (slice / concat / shift) is delegated to that index, which returns
 positional selections that this module applies to the data axis.
@@ -410,7 +410,7 @@ class Series:
         """Resample onto a fresh phase-0 grid at ``new_sr`` over the same
         declared domain; the result carries a ``GridIndex``.  ``new_sr`` is
         coerced to an exact ``(num, den)`` fraction (see
-        :func:`~tflib.indexes.normalize_rate`)."""
+        :func:`~tdseries.indexes.normalize_rate`)."""
         num, den = normalize_rate(new_sr)
         sr_float = num / den
         ti = self.tindex
@@ -482,7 +482,7 @@ def uniform(
 ) -> Series:
     """A uniformly-sampled series on a ``GridIndex``.  ``dims`` defaults to
     ``(None, ..., "time")``; ``sr`` is coerced to an exact ``(num, den)``
-    fraction (see :func:`~tflib.indexes.normalize_rate`); ``t_start`` is float
+    fraction (see :func:`~tdseries.indexes.normalize_rate`); ``t_start`` is float
     seconds or int ticks."""
     dims = _default_dims(data.ndim) if dims is None else tuple(dims)
     size = int(data.shape[dims.index("time")])
