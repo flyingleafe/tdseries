@@ -64,8 +64,10 @@ uv run pytest
 ```
 
 `nix develop` provides Python + uv and pre-commit hooks (ruff, ruff-format,
-pyright). Data leaves may be numpy arrays or torch tensors (torch optional:
-`uv sync --extra torch`).
+pyright). Data leaves may be any Array-API array — numpy, torch, JAX, CuPy, …
+— dispatched through [`array-api-compat`](https://github.com/data-apis/array-api-compat);
+torch stays optional (`uv sync --extra torch`). The time/dimension index layer
+is numpy-`int64` regardless of the payload backend.
 
 ## Lineage
 

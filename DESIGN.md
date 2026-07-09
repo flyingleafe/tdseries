@@ -54,7 +54,8 @@ Validation: dims unique among named; `"time"` ⇒ `indexes["time"]` is a
 `TimeIndex` with `n ==` axis size; non-time named dims may carry a
 `RangeIndex`/`LabelIndex` with matching `n`; anonymous (`None`) axes carry no
 index. Use `tdseries._array.is_tensor/take/concat/array_equal/to_numpy_f64` for
-all data manipulation (they dispatch over the numpy and torch backends).
+all data manipulation (they dispatch over any Array-API backend — numpy, torch,
+JAX, … — via `array-api-compat`; the index layer stays numpy-`int64`).
 
 Properties: `shape`, `ndim`, `has_time`, `time_axis`, `tindex` (raises
 `ValueError` if atemporal), `t_start/t_end/duration` (float seconds) and

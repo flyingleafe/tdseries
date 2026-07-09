@@ -1,6 +1,6 @@
 [project]
 name = "tdseries"
-version = "0.1.1"
+version = "0.2.0"
 description = "Immutable pytree frames of tensors with named, indexed dimensions — time as a first-class tick-exact dimension"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,6 +8,7 @@ license = { text = "MIT" }
 authors = [{ name = "Dmitrii Mukhutdinov", email = "flyingleafe@gmail.com" }]
 dependencies = [
     "numpy>=1.24",
+    "array-api-compat>=1.9",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,7 @@ dev = [
     "hypothesis>=6.100",
     "ruff>=0.4",
     "torch>=2.0",
+    "jax>=0.4.28",
 ]
 
 [tool.uv.sources]

@@ -12,7 +12,7 @@ element-wise operator layer) — check it before proposing "new" features.
 | Path | Role |
 |---|---|
 | `src/tdseries/_ticks.py` | seconds↔int64-tick conversion boundary; `TICKS_PER_SECOND` |
-| `src/tdseries/_array.py` | numpy/torch backend dispatch (`take`, `concat`, `array_equal`, ...) |
+| `src/tdseries/_array.py` | Array-API backend dispatch via `array-api-compat` (`take`, `concat`, `array_equal`, ...); payload may be numpy/torch/JAX/… while indexes stay numpy-`int64` |
 | `src/tdseries/errors.py` | `DomainError`, `IncompatibleError`, `DimensionError` |
 | `src/tdseries/indexes.py` | the index hierarchy: `RangeIndex`, `LabelIndex` (ordinary dims); `GridIndex`, `StampIndex`, `SpanIndex` (time). All exact-tick cut/seam arithmetic lives here. |
 | `src/tdseries/series.py` | `Series` leaf (data + dims + indexes) and factories `uniform`/`events`/`spans`/`wrap` |
