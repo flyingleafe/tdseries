@@ -231,7 +231,13 @@ class TimeIndex(ABC):
     def n(self) -> int:
         """Number of positions along the dim (samples / events / spans)."""
 
-    # ---- algebra ----------------------------------------------------------
+    @property
+    @abstractmethod
+    def timestamps(self) -> np.ndarray:
+        """The time coordinate of every position along the dim, float
+        seconds: sample left-edges for a grid, event times for stamps,
+        ``[start, end)`` edge pairs for spans."""
+
     def _check_window(self, a: int, b: int) -> tuple[int, int]:
         t0, t1 = self.t_start_ticks, self.t_end_ticks
         if a < t0 or b > t1 or a > b:
@@ -339,6 +345,12 @@ class GridIndex(TimeIndex):
     @property
     def t_first_edge(self) -> float:
         return ticks_to_secs(self.t_start_ticks) + self.phase / self.sr
+
+    @property
+    def timestamps(self) -> np.ndarray:
+        """Absolute left-edge time of each sample, float seconds (alias of
+        :meth:`sample_times`)."""
+        return self.sample_times()
 
     def sample_times(self) -> np.ndarray:
         """Absolute left-edge time of each sample, float seconds."""
@@ -527,6 +539,12 @@ class StampIndex(TimeIndex):
     def abs_stamps(self) -> np.ndarray:
         return ticks_array_to_secs(self.stamps + self.t_start_ticks)
 
+    @property
+    def timestamps(self) -> np.ndarray:
+        """Absolute event times, float seconds (alias of
+        :attr:`abs_stamps`)."""
+        return self.abs_stamps
+
     def slice(self, a_ticks: int, b_ticks: int) -> tuple[StampIndex, PosSel]:
         a, b = self._check_window(a_ticks, b_ticks)
         ra = a - self.t_start_ticks
@@ -662,6 +680,13 @@ class SpanIndex(TimeIndex):
     @property
     def abs_ends(self) -> np.ndarray:
         return ticks_array_to_secs(self.ends + self.t_start_ticks)
+
+    @property
+    def timestamps(self) -> np.ndarray:
+        """Per-span edge times, float seconds, shape ``(n, 2)``: the
+        ``[start, end)`` bounds of each span, in order (column stack of
+        :attr:`abs_starts` / :attr:`abs_ends`)."""
+        return np.column_stack([self.abs_starts, self.abs_ends])
 
     def slice(self, a_ticks: int, b_ticks: int) -> tuple[SpanIndex, PosSel]:
         a, b = self._check_window(a_ticks, b_ticks)

@@ -35,6 +35,10 @@ The dim name `"time"` is reserved: it must carry a `TimeIndex`
 
     slice(a, b) ⊕ slice(b, c) == slice(a, c)   for t_start ≤ a ≤ b ≤ c ≤ t_end
 
+Every `TimeIndex` also exposes `timestamps` — the float-seconds coordinate
+of each position along the dim (sample left-edges for a grid, event times
+for stamps, `[start, end)` edge pairs for spans).
+
 `shift` is O(1) everywhere (only the scalar anchor moves; stored content is
 anchor-relative).
 
@@ -60,8 +64,10 @@ JAX, … — via `array-api-compat`; the index layer stays numpy-`int64`).
 Properties: `shape`, `ndim`, `has_time`, `time_axis`, `tindex` (raises
 `ValueError` if atemporal), `t_start/t_end/duration` (float seconds) and
 `t_start_ticks/t_end_ticks/duration_ticks` (exact; raise `ValueError` if
-atemporal), `dim_index(name)` (explicit or default `RangeIndex(size)`),
-`dim_size(name)`.
+atemporal), `timestamps` (float seconds, one coordinate per time position:
+sample left-edges / event times / `[start, end)` edge pairs, shape `(n, 2)`
+for spans; raises `ValueError` if atemporal), `dim_index(name)` (explicit or
+default `RangeIndex(size)`), `dim_size(name)`.
 
 Accessors (each a tiny helper object with `__getitem__`):
 

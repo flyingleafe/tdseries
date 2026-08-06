@@ -362,3 +362,9 @@ def test_index_key_must_be_named_dim():
 def test_anonymous_axes_carry_no_index():
     s = wrap(np.zeros((2, 3)))
     assert s.dims == (None, None)
+
+
+def test_atemporal_series_has_no_timestamps():
+    s = wrap(np.arange(3.0))
+    with pytest.raises(ValueError):
+        _ = s.timestamps

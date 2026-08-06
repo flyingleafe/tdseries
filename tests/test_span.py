@@ -38,6 +38,14 @@ def test_full_domain_slice_is_equal(ss: Series):
     assert ss.ticks[ss.t_start_ticks : ss.t_end_ticks].equal(ss)
 
 
+def test_timestamps_are_span_edges_in_float_seconds():
+    ss = spans(np.array([0.1, 0.5]), np.array([0.3, 0.9]), t_start=0.0, t_end=1.0)
+    ts = ss.timestamps
+    assert ts.dtype.kind == "f"
+    assert ts.shape == (2, 2)
+    np.testing.assert_allclose(ts, [[0.1, 0.3], [0.5, 0.9]])
+
+
 @settings(deadline=None, max_examples=200)
 @given(span_series(), st.data())
 def test_slice_concat_identity(ss: Series, data):
