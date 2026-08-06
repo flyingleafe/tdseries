@@ -222,3 +222,11 @@ def test_events_float_timestamps_are_seconds():
     assert es.t_start_ticks == 0
     assert es.t_end_ticks == 1_000_000_000
     assert list(_stamp_index(es).abs_stamps_ticks) == [500_000_000, 800_000_000]
+
+
+def test_timestamps_are_abs_stamps_in_float_seconds():
+    es = events(np.array([0.5, 0.8]), np.array([10.0, 20.0]), t_start=0.0, t_end=1.0)
+    ts = es.timestamps
+    assert ts.dtype.kind == "f"
+    np.testing.assert_allclose(ts, [0.5, 0.8])
+    np.testing.assert_allclose(ts, _stamp_index(es).abs_stamps)

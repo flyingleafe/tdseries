@@ -70,6 +70,26 @@ def test_none_bounds_are_domain_bounds(us: Series):
     assert us.time[:].equal(us)
 
 
+@settings(deadline=None, max_examples=100)
+@given(uniform_series())
+def test_timestamps_are_sample_left_edges_in_float_seconds(us: Series):
+    ts = us.timestamps
+    ti = us.tindex
+    assert isinstance(ti, GridIndex)
+    assert ts.dtype.kind == "f"
+    assert ts.shape == (ti.size,)
+    np.testing.assert_allclose(ts, ti.sample_times())
+    np.testing.assert_allclose(ts, ti.t_start + (ti.phase + np.arange(ti.size)) / ti.sr)
+
+
+@settings(deadline=None, max_examples=100)
+@given(multi_mic_uniform_series())
+def test_timestamps_do_not_depend_on_time_axis_position(us: Series):
+    # Time is the trailing axis here; timestamps are still one coordinate
+    # per time position, independent of the axis position in ``dims``.
+    assert us.timestamps.shape == (us.dim_size("time"),)
+
+
 # ---------------------------------------------------------------------------
 # The big one: slice(a,b) + slice(b,c) == slice(a,c), at arbitrary exact
 # ticks -- including sub-sample cuts.

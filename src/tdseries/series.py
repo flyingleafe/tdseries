@@ -258,6 +258,14 @@ class Series:
     def duration_ticks(self) -> int:
         return self.tindex.dur_ticks
 
+    @property
+    def timestamps(self) -> np.ndarray:
+        """Time coordinate of every position along the time dim, float
+        seconds: sample left-edges for a ``GridIndex``, event times for a
+        ``StampIndex``, ``[start, end)`` edge pairs (shape ``(n, 2)``) for a
+        ``SpanIndex``.  Raises ``ValueError`` if atemporal."""
+        return self.tindex.timestamps
+
     def dim_index(self, name: str) -> DimIndex | TimeIndex:
         """The explicit index for ``name``, or the default ``RangeIndex`` for
         a non-time named dim that carries none."""
