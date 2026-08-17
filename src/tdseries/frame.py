@@ -21,7 +21,7 @@ leaf.  A tree-wide dim check runs at construction: each non-time dim's
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -235,6 +235,18 @@ class Frame:
             new_t0 = self.t_start_ticks
             new_te = self.t_end_ticks
         return Frame(abs_entries, t_start=new_t0, t_end=new_te)
+
+    def map_entry(self, name: str, fn: Callable[[Any], Any]) -> Frame:
+        """Apply ``fn`` to the entry ``name`` — the value ``frame[name]``
+        returns, a temporal child re-anchored to absolute time — and store
+        the result back under the same name.  The declared domain is
+        preserved: a temporal result must fit inside it (``DomainError``
+        otherwise — use ``with_entry``, which expands the hull)."""
+        return Frame(
+            {**self._abs(), name: fn(self[name])},
+            t_start=self.t_start_ticks,
+            t_end=self.t_end_ticks,
+        )
 
     def merge(self, other: Frame, overwrite: bool = False) -> Frame:
         """Column-wise union of two frames; result hull is the union.  Key

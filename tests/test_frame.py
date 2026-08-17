@@ -361,6 +361,94 @@ def test_with_entry_auto_wraps_raw_arrays():
 
 
 # ---------------------------------------------------------------------------
+# map_entry
+# ---------------------------------------------------------------------------
+
+
+@settings(deadline=None, max_examples=60)
+@given(mixed_frame(), st.data())
+def test_map_entry_identity_property(tf: Frame, data):
+    name = data.draw(st.sampled_from(sorted(tf.keys())))
+    assert tf.map_entry(name, lambda v: v).equal(tf)
+
+
+def test_map_entry_applies_fn_to_series():
+    tf = _toy_frame(t0=0)
+    mapped = tf.map_entry("audio", lambda s: s.map_data(lambda d: d * 2.0))
+    assert np.array_equal(mapped["audio"].data, tf["audio"].data * 2.0)
+    assert mapped["rps"].equal(tf["rps"])
+    assert mapped["recording_id"] == tf["recording_id"]
+    assert mapped.t_start_ticks == tf.t_start_ticks
+    assert mapped.t_end_ticks == tf.t_end_ticks
+
+
+def test_map_entry_receives_absolute_child():
+    captured: list[int] = []
+    tf = _toy_frame(t0=5_000_000_000)
+
+    def capture(s: Series) -> Series:
+        captured.append(s.t_start_ticks)
+        return s
+
+    tf.map_entry("audio", capture)
+    assert captured == [5_000_000_000]
+
+
+def test_map_entry_shrink_keeps_declared_domain():
+    tf = _toy_frame(t0=0)  # declared [0, 1) s
+    mapped = tf.map_entry("audio", lambda s: s.ticks[0:500_000_000])
+    assert mapped.t_start_ticks == 0
+    assert mapped.t_end_ticks == 1_000_000_000
+    assert mapped["audio"].t_end_ticks == 500_000_000
+
+
+def test_map_entry_temporal_result_outside_domain_raises():
+    tf = _toy_frame(t0=0)
+    with pytest.raises(DomainError):
+        tf.map_entry("audio", lambda s: s.shift(1_000_000_000))
+
+
+def test_map_entry_can_replace_temporal_with_invariant():
+    tf = _toy_frame(t0=0)
+    mapped = tf.map_entry("audio", lambda s: s.data.sum())
+    assert mapped["audio"] == 45.0
+    assert mapped.t_start_ticks == 0
+    assert mapped.t_end_ticks == 1_000_000_000
+
+
+def test_map_entry_result_auto_wraps_raw_arrays():
+    tf = _toy_frame(t0=0)
+    mapped = tf.map_entry("recording_id", lambda _: np.array([1.0, 2.0, 3.0]))
+    entry = mapped["recording_id"]
+    assert isinstance(entry, Series)
+    assert entry.dims == (None,)
+
+
+def test_map_entry_missing_key_raises():
+    tf = _toy_frame(t0=0)
+    with pytest.raises(KeyError):
+        tf.map_entry("missing", lambda s: s)
+
+
+def test_map_entry_nested_frame():
+    captured: list[int] = []
+    tf = _nested_frame(t0=5_000_000_000)
+
+    def tag(f: Frame) -> Frame:
+        captured.append(f.t_start_ticks)
+        return f.with_entry("tag", "x")
+
+    mapped = tf.map_entry("inner", tag)
+    inner = mapped["inner"]
+    assert isinstance(inner, Frame)
+    assert inner["tag"] == "x"
+    assert captured == [5_000_000_000]
+    assert mapped["audio"].equal(tf["audio"])
+    assert mapped.t_start_ticks == tf.t_start_ticks
+    assert mapped.t_end_ticks == tf.t_end_ticks
+
+
+# ---------------------------------------------------------------------------
 # Dict-like protocol
 # ---------------------------------------------------------------------------
 
