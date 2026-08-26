@@ -158,12 +158,15 @@ mixing `RangeIndex` and `LabelIndex` occurrences of one dim is an error
 API:
 
 - dict-like: `frame[key]`, `keys/values/items`, `in`, `len`, iteration.
-- column ops: `select(keys)`, `drop(keys)`, `with_entry(name, value)`
-  (hull expands as needed), `map_entry(name, fn)` (apply `fn` to the entry
-  as read by `frame[name]` — temporal children re-anchored to absolute time
-  — and store the result back under the same name; the declared domain is
-  preserved and a temporal result must fit inside it, `DomainError`
-  otherwise — `with_entry` is the domain-expanding put),
+- column ops: `select(keys)`, `drop(keys)`,
+  `with_entry(name, value, expand=True)` (hull expands as needed;
+  `expand=False` preserves the declared domain and a temporal value that
+  doesn't fit raises `DomainError`), `map_entry(name, fn, expand=False)`
+  (apply `fn` to the entry as read by `frame[name]` — temporal children
+  re-anchored to absolute time — and store the result back under the same
+  name; by default the declared domain is preserved and a temporal result
+  must fit inside it, `DomainError` otherwise; `expand=True` gives the
+  domain-expanding put-semantics),
   `merge(other, overwrite=False)` (key collisions error unless overwrite;
   hull = union).
 - time ops: `frame.time[a:b]`, `frame.ticks[a:b]`, `slice_ticks(a, b)`,

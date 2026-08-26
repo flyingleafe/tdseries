@@ -223,12 +223,14 @@ class Frame:
             self.dur_ticks,
         )
 
-    def with_entry(self, name: str, value: Any) -> Frame:
-        """Return a new frame with ``name`` set to ``value``, expanding the
-        hull if the value is temporal and extends past it."""
+    def _set_entry(self, name: str, value: Any, *, expand: bool) -> Frame:
+        """Return a new frame with ``name`` set to ``value`` (an absolute
+        entry).  With ``expand=True`` the hull grows to fit a temporal value;
+        with ``expand=False`` the declared domain is preserved and a temporal
+        value that extends past it raises ``DomainError``."""
         value = _wrap_entry(value)
         abs_entries = {**self._abs(), name: value}
-        if _is_temporal(value):
+        if expand and _is_temporal(value):
             new_t0 = min(self.t_start_ticks, _abs_start(value))
             new_te = max(self.t_end_ticks, _abs_end(value))
         else:
@@ -236,17 +238,21 @@ class Frame:
             new_te = self.t_end_ticks
         return Frame(abs_entries, t_start=new_t0, t_end=new_te)
 
-    def map_entry(self, name: str, fn: Callable[[Any], Any]) -> Frame:
+    def with_entry(self, name: str, value: Any, *, expand: bool = True) -> Frame:
+        """Return a new frame with ``name`` set to ``value``.  By default the
+        hull expands if a temporal value extends past it; ``expand=False``
+        keeps the declared domain and raises ``DomainError`` if the value
+        does not fit."""
+        return self._set_entry(name, value, expand=expand)
+
+    def map_entry(self, name: str, fn: Callable[[Any], Any], *, expand: bool = False) -> Frame:
         """Apply ``fn`` to the entry ``name`` — the value ``frame[name]``
         returns, a temporal child re-anchored to absolute time — and store
-        the result back under the same name.  The declared domain is
-        preserved: a temporal result must fit inside it (``DomainError``
-        otherwise — use ``with_entry``, which expands the hull)."""
-        return Frame(
-            {**self._abs(), name: fn(self[name])},
-            t_start=self.t_start_ticks,
-            t_end=self.t_end_ticks,
-        )
+        the result back under the same name.  By default the declared domain
+        is preserved and a temporal result must fit inside it (``DomainError``
+        otherwise); ``expand=True`` gives the domain-expanding put-semantics
+        of ``with_entry``."""
+        return self._set_entry(name, fn(self[name]), expand=expand)
 
     def merge(self, other: Frame, overwrite: bool = False) -> Frame:
         """Column-wise union of two frames; result hull is the union.  Key

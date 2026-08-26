@@ -360,6 +360,22 @@ def test_with_entry_auto_wraps_raw_arrays():
     assert entry.dims == (None,)
 
 
+def test_with_entry_expand_false_keeps_domain_when_value_fits():
+    tf = _toy_frame(t0=0)  # declared [0, 1 s)
+    inside = uniform(np.zeros(5), sr=10, t_start=200_000_000)
+    kept = tf.with_entry("inside", inside, expand=False)
+    assert kept.t_start_ticks == tf.t_start_ticks
+    assert kept.t_end_ticks == tf.t_end_ticks
+    assert kept["inside"].equal(inside)
+
+
+def test_with_entry_expand_false_raises_when_value_outside():
+    tf = _toy_frame(t0=0)  # declared [0, 1 s)
+    late = uniform(np.zeros(5), sr=10, t_start=5_000_000_000)
+    with pytest.raises(DomainError):
+        tf.with_entry("late", late, expand=False)
+
+
 # ---------------------------------------------------------------------------
 # map_entry
 # ---------------------------------------------------------------------------
@@ -406,6 +422,16 @@ def test_map_entry_temporal_result_outside_domain_raises():
     tf = _toy_frame(t0=0)
     with pytest.raises(DomainError):
         tf.map_entry("audio", lambda s: s.shift(1_000_000_000))
+
+
+def test_map_entry_expand_true_expands_hull():
+    tf = _toy_frame(t0=0)  # declared [0, 1 s)
+    mapped = tf.map_entry("audio", lambda s: s.shift(1_000_000_000), expand=True)
+    assert mapped.t_start_ticks == 0
+    assert mapped.t_end_ticks == 2_000_000_000
+    assert mapped["audio"].t_start_ticks == 1_000_000_000
+    assert mapped["audio"].t_end_ticks == 2_000_000_000
+    assert mapped["rps"].equal(tf["rps"])
 
 
 def test_map_entry_can_replace_temporal_with_invariant():
